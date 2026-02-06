@@ -331,43 +331,43 @@ services:
   # AI SERVICES (EXISTING)
   # ===========================================
 
-  ia-mammographic:
-    build:
-      context: ./ia-service/mammographic-app
-      dockerfile: Dockerfile
-    container_name: pinkvision-ia-mammographic
-    ports:
-      - "8001:8001"
-    environment:
-      - UVICORN_HOST=0.0.0.0
-      - UVICORN_PORT=8001
-    volumes:
-      - ./ia-service/mammographic-app/weights:/app/weights
-    networks:
-      - pinkvision-network
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+  # ia-mammographic:
+  #   build:
+  #     context: ./ia-service/mammographic-app
+  #     dockerfile: Dockerfile
+  #   container_name: pinkvision-ia-mammographic
+  #   ports:
+  #     - "8001:8001"
+  #   environment:
+  #     - UVICORN_HOST=0.0.0.0
+  #     - UVICORN_PORT=8001
+  #   volumes:
+  #     - ./ia-service/mammographic-app/weights:/app/weights
+  #   networks:
+  #     - pinkvision-network
+  #   healthcheck:
+  #     test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
 
-  ia-chatbot:
-    build:
-      context: ./ia-service/chatbot_pinkviosion
-      dockerfile: Dockerfile
-    container_name: pinkvision-ia-chatbot
-    ports:
-      - "8002:8000"
-    environment:
-      - UVICORN_HOST=0.0.0.0
-      - UVICORN_PORT=8000
-    networks:
-      - pinkvision-network
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+  # ia-chatbot:
+  #   build:
+  #     context: ./ia-service/chatbot_pinkviosion
+  #     dockerfile: Dockerfile
+  #   container_name: pinkvision-ia-chatbot
+  #   ports:
+  #     - "8002:8000"
+  #   environment:
+  #     - UVICORN_HOST=0.0.0.0
+  #     - UVICORN_PORT=8000
+  #   networks:
+  #     - pinkvision-network
+  #   healthcheck:
+  #     test: [ "CMD", "curl", "-f", "http://localhost:8000/" ]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
 
   # ===========================================
   # FRONTEND
