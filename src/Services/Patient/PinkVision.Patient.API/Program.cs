@@ -129,7 +129,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<PatientDbContext>();
-    db.Database.Migrate();
+    db.Database.EnsureCreated();
 }
 
 // Configure pipeline
