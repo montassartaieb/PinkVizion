@@ -1,0 +1,74 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:5000']
+    metrics_path: /metrics
+
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-service:5001']
+    metrics_path: /metrics
+
+  - job_name: 'patient-service'
+    static_configs:
+      - targets: ['patient-service:5002']
+    metrics_path: /metrics
+
+  - job_name: 'doctor-service'
+    static_configs:
+      - targets: ['doctor-service:5003']
+    metrics_path: /metrics
+
+  - job_name: 'imaging-service'
+    static_configs:
+      - targets: ['imaging-service:5004']
+    metrics_path: /metrics
+
+  - job_name: 'medical-record-service'
+    static_configs:
+      - targets: ['medical-record-service:5005']
+    metrics_path: /metrics
+
+  - job_name: 'appointment-service'
+    static_configs:
+      - targets: ['appointment-service:5006']
+    metrics_path: /metrics
+
+  - job_name: 'notification-service'
+    static_configs:
+      - targets: ['notification-service:5007']
+    metrics_path: /metrics
+
+  - job_name: 'dashboard-service'
+    static_configs:
+      - targets: ['dashboard-service:5008']
+    metrics_path: /metrics
+
+  - job_name: 'ia-mammographic'
+    static_configs:
+      - targets: ['ia-mammographic:8001']
+    metrics_path: /metrics
+
+  - job_name: 'ia-chatbot'
+    static_configs:
+      - targets: ['ia-chatbot:8000']
+    metrics_path: /metrics
+
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq:15692']

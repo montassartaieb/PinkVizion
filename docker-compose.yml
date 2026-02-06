@@ -1,0 +1,400 @@
+services:
+  # ===========================================
+  # DATABASES
+  # ===========================================
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: pinkvision-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pinkvision}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-PinkVision2024!}
+      POSTGRES_DB: ${POSTGRES_DB:-pinkvision_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-scripts/postgres:/docker-entrypoint-initdb.d
+    networks:
+      - pinkvision-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pinkvision}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:7
+    container_name: pinkvision-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-pinkvision}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-PinkVision2024!}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - pinkvision-network
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # MESSAGE BROKER
+  # ===========================================
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: pinkvision-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-pinkvision}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-PinkVision2024!}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - pinkvision-network
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # MONITORING
+  # ===========================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: pinkvision-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - pinkvision-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: pinkvision-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-PinkVision2024!}
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - pinkvision-network
+    depends_on:
+      - prometheus
+
+  # ===========================================
+  # API GATEWAY
+  # ===========================================
+
+  api-gateway:
+    build:
+      context: ./src/ApiGateway
+      dockerfile: Dockerfile
+    container_name: pinkvision-gateway
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5000
+      - JWT_SECRET=${JWT_SECRET:-PinkVisionSuperSecretKey2024!MinLength32Chars}
+      - JWT_ISSUER=${JWT_ISSUER:-PinkVision}
+      - JWT_AUDIENCE=${JWT_AUDIENCE:-PinkVisionAPI}
+    ports:
+      - "5000:5000"
+    networks:
+      - pinkvision-network
+    depends_on:
+      - auth-service
+      - patient-service
+      - doctor-service
+      - imaging-service
+      - medical-record-service
+      - appointment-service
+      - notification-service
+      - dashboard-service
+
+  # ===========================================
+  # BACKEND MICROSERVICES
+  # ===========================================
+
+  auth-service:
+    build:
+      context: ./src/Services/Auth
+      dockerfile: Dockerfile
+    container_name: pinkvision-auth
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5001
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=pinkvision_auth;Username=${POSTGRES_USER:-pinkvision};Password=${POSTGRES_PASSWORD:-PinkVision2024!}
+      - JWT_SECRET=${JWT_SECRET:-PinkVisionSuperSecretKey2024!MinLength32Chars}
+      - JWT_ISSUER=${JWT_ISSUER:-PinkVision}
+      - JWT_AUDIENCE=${JWT_AUDIENCE:-PinkVisionAPI}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_USER:-pinkvision}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-PinkVision2024!}
+    ports:
+      - "5001:5001"
+    networks:
+      - pinkvision-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  patient-service:
+    build:
+      context: ./src/Services/Patient
+      dockerfile: Dockerfile
+    container_name: pinkvision-patient
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5002
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=pinkvision_patient;Username=${POSTGRES_USER:-pinkvision};Password=${POSTGRES_PASSWORD:-PinkVision2024!}
+      - JWT_SECRET=${JWT_SECRET:-PinkVisionSuperSecretKey2024!MinLength32Chars}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_USER:-pinkvision}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-PinkVision2024!}
+    ports:
+      - "5002:5002"
+    networks:
+      - pinkvision-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  doctor-service:
+    build:
+      context: ./src/Services/Doctor
+      dockerfile: Dockerfile
+    container_name: pinkvision-doctor
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5003
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=pinkvision_doctor;Username=${POSTGRES_USER:-pinkvision};Password=${POSTGRES_PASSWORD:-PinkVision2024!}
+      - JWT_SECRET=${JWT_SECRET:-PinkVisionSuperSecretKey2024!MinLength32Chars}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_USER:-pinkvision}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-PinkVision2024!}
+    ports:
+      - "5003:5003"
+    networks:
+      - pinkvision-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  imaging-service:
+    build:
+      context: ./src/Services/Imaging
+      dockerfile: Dockerfile
+    container_name: pinkvision-imaging
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5004
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=pinkvision_imaging;Username=${POSTGRES_USER:-pinkvision};Password=${POSTGRES_PASSWORD:-PinkVision2024!}
+      - MongoDB__ConnectionString=mongodb://${MONGO_USER:-pinkvision}:${MONGO_PASSWORD:-PinkVision2024!}@mongodb:27017
+      - JWT_SECRET=${JWT_SECRET:-PinkVisionSuperSecretKey2024!MinLength32Chars}
+      - AI_SERVICE_URL=http://ia-mammographic:8001
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_USER:-pinkvision}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-PinkVision2024!}
+    ports:
+      - "5004:5004"
+    volumes:
+      - imaging_data:/app/uploads
+    networks:
+      - pinkvision-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  medical-record-service:
+    build:
+      context: ./src/Services/MedicalRecord
+      dockerfile: Dockerfile
+    container_name: pinkvision-medical-record
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5005
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=pinkvision_medical;Username=${POSTGRES_USER:-pinkvision};Password=${POSTGRES_PASSWORD:-PinkVision2024!}
+      - JWT_SECRET=${JWT_SECRET:-PinkVisionSuperSecretKey2024!MinLength32Chars}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_USER:-pinkvision}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-PinkVision2024!}
+    ports:
+      - "5005:5005"
+    networks:
+      - pinkvision-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  appointment-service:
+    build:
+      context: ./src/Services/Appointment
+      dockerfile: Dockerfile
+    container_name: pinkvision-appointment
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5006
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=pinkvision_appointment;Username=${POSTGRES_USER:-pinkvision};Password=${POSTGRES_PASSWORD:-PinkVision2024!}
+      - JWT_SECRET=${JWT_SECRET:-PinkVisionSuperSecretKey2024!MinLength32Chars}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_USER:-pinkvision}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-PinkVision2024!}
+    ports:
+      - "5006:5006"
+    networks:
+      - pinkvision-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  notification-service:
+    build:
+      context: ./src/Services/Notification
+      dockerfile: Dockerfile
+    container_name: pinkvision-notification
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5007
+      - MongoDB__ConnectionString=mongodb://${MONGO_USER:-pinkvision}:${MONGO_PASSWORD:-PinkVision2024!}@mongodb:27017
+      - JWT_SECRET=${JWT_SECRET:-PinkVisionSuperSecretKey2024!MinLength32Chars}
+      - SMTP__Host=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP__Port=${SMTP_PORT:-587}
+      - SMTP__Username=${SMTP_USERNAME}
+      - SMTP__Password=${SMTP_PASSWORD}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_USER:-pinkvision}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-PinkVision2024!}
+    ports:
+      - "5007:5007"
+    networks:
+      - pinkvision-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  dashboard-service:
+    build:
+      context: ./src/Services/Dashboard
+      dockerfile: Dockerfile
+    container_name: pinkvision-dashboard
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5008
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=pinkvision_dashboard;Username=${POSTGRES_USER:-pinkvision};Password=${POSTGRES_PASSWORD:-PinkVision2024!}
+      - JWT_SECRET=${JWT_SECRET:-PinkVisionSuperSecretKey2024!MinLength32Chars}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_USER:-pinkvision}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD:-PinkVision2024!}
+    ports:
+      - "5008:5008"
+    networks:
+      - pinkvision-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # ===========================================
+  # AI SERVICES (EXISTING)
+  # ===========================================
+
+  ia-mammographic:
+    build:
+      context: ./ia-service/mammographic-app
+      dockerfile: Dockerfile
+    container_name: pinkvision-ia-mammographic
+    ports:
+      - "8001:8001"
+    environment:
+      - UVICORN_HOST=0.0.0.0
+      - UVICORN_PORT=8001
+    volumes:
+      - ./ia-service/mammographic-app/weights:/app/weights
+    networks:
+      - pinkvision-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ia-chatbot:
+    build:
+      context: ./ia-service/chatbot_pinkviosion
+      dockerfile: Dockerfile
+    container_name: pinkvision-ia-chatbot
+    ports:
+      - "8002:8000"
+    environment:
+      - UVICORN_HOST=0.0.0.0
+      - UVICORN_PORT=8000
+    networks:
+      - pinkvision-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================
+  # FRONTEND
+  # ===========================================
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pinkvision-frontend
+    ports:
+      - "4201:80"
+    environment:
+      - API_URL=http://api-gateway:5000
+    networks:
+      - pinkvision-network
+    depends_on:
+      - api-gateway
+
+networks:
+  pinkvision-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:
+  imaging_data:
